@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Circle Attack</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Roboto:wght@700&display=swap');
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #111;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            font-family: 'Roboto', 'Black Han+Sans', sans-serif;
+            touch-action: none; /* 모바일 터치 딜레이 방지 */
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            max-width: 45vh; /* 1:2 비율 느낌을 주기 위해 너비 제한 */
+            max-height: 90vh;
+            background-color: #1a1a1a;
+            border-radius: 20px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            overflow: hidden;
+            border: 2px solid #333;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            touch-action: none; /* 캔버스 자체에도 touch-action 적용 */
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between; /* 상하단 분리 */
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        #top-ui {
+            width: 100%;
+            display: flex;
+            flex-direction: column; /* 레벨과 점수를 수직으로 배치 */
+            justify-content: center; 
+            align-items: center; /* 중앙 정렬 */
+        }
+        
+        /* #bottom-ui는 이제 사용되지 않지만 구조 유지를 위해 남겨둠 */
+        #bottom-ui {
+            width: 100%;
+            display: flex;
+            justify-content: center; /* 중앙 정렬 */
+            align-items: flex-end;
+        }
+
+        #level-display {
+            font-size: 2rem; /* 레벨 크기 감소 */
+            text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+            color: #0ff;
+            text-align: center;
+        }
+        
+        #score-board {
+            font-size: 3.5rem; /* 점수 크기 증가 */
+            color: #fff; /* 점수 색상 강조 */
+            text-shadow: none; /* 글로우 효과 제거 */
+            text-align: center;
+            line-height: 1.1;
+            font-weight: bold;
+            /* 점수 튕김 효과를 위해 transition 추가 */
+            transition: transform 0.1s ease-out; 
+        }
+        
+        /* 점수 튕김 애니메이션 */
+        #score-board.bounce {
+            animation: scoreBounce 0.3s ease-out;
+        }
+
+        @keyframes scoreBounce {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.15); }
+            100% { transform: scale(1); }
+        }
+
+        #start-screen, #game-over-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            pointer-events: auto; /* 클릭 가능하도록 */
+            transition: opacity 0.3s;
+        }
+        
+        #level-clear-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 3rem;
+            color: #fff;
+            text-shadow: 0 0 30px #0ff;
+            font-weight: bold;
+            z-index: 20;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .hidden {
+            opacity: 0;
+            pointer-events: none !important;
+        }
+
+        h1 {
+            font-size: 3rem;
+            margin: 0;
+            color: #fff;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            background: linear-gradient(to bottom, #fff, #aaa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-align: center;
+        }
+
+        p {
+            font-size: 1.2rem;
+            color: #aaa;
+            margin-top: 10px;
+            text-align: center;
+        }
+
+        .btn {
+            margin-top: 30px;
+            padding: 15px 40px;
+            font-size: 1.5rem;
+            background: #0ff;
+            color: #000;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            font-weight: bold;
+            box-shadow: 0 0 20px #0ff;
+            animation: pulse 1.5s infinite;
+            pointer-events: auto; /* 버튼은 항상 클릭 가능 */
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); box-shadow: 0 0 20px #0ff; }
+            50% { transform: scale(1.05); box-shadow: 0 0 40px #0ff; }
+            100% { transform: scale(1); box-shadow: 0 0 20px #0ff; }
+        }
+
+        /* 튜토리얼 텍스트 */
+        .tutorial {
+            position: absolute;
+            bottom: 5%; /* 하단에서 더 아래로 내림 */
+            width: 100%;
+            text-align: center;
+            color: rgba(255,255,255,0.5);
+            font-size: 0.9rem;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        
+        <div id="ui-layer">
+            <div id="top-ui">
+                <div id="level-display">Level 1</div>
+                <div id="score-board">0</div> <!-- 점수판을 레벨 밑으로 이동 -->
+            </div>
+            <div id="bottom-ui">
+                <!-- UI 배치 변경으로 비워둠 -->
+            </div>
+        </div>
+
+        <div id="start-screen">
+            <h1>CIRCLE<br>ATTACK</h1> <!-- 게임 이름 변경 -->
+            <p>에너지를 획득하여 중앙 코어를 타격하세요!</p>
+            <button class="btn" id="start-btn">시작하기</button> 
+        </div>
+
+        <div id="game-over-screen" class="hidden">
+            <h1 style="color: #ff3333; -webkit-text-fill-color: #ff3333;">GAME<br>OVER</h1>
+            <p id="final-score">Score: 0</p>
+            <button class="btn" id="restart-btn" style="background: #ff3333; box-shadow: 0 0 20px #ff3333;">다시하기</button>
+        </div>
+        
+        <div id="level-clear-message" class="hidden"></div>
+        
+        <div class="tutorial" id="tutorial-msg">화면을 탭하여 방향을 바꾸고 총알을 피하세요!</div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const startScreen = document.getElementById('start-screen');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const scoreBoard = document.getElementById('score-board');
+        const finalScoreEl = document.getElementById('final-score');
+        const tutorialMsg = document.getElementById('tutorial-msg');
+        const levelDisplayEl = document.getElementById('level-display');
+        const levelClearMessageEl = document.getElementById('level-clear-message'); // 레벨 클리어 메시지
+
+        // 게임 상태 변수
+        let score = 0;
+        let frames = 0;
+        let animationFrameId; // requestAnimationFrame ID 저장
+        // 0: START, 1: PLAYING, 2: LEVEL_CLEAR_SEQUENCE, 3: GAME_OVER
+        let gameState = 0; 
+        let transitionTimer = 0; // 레벨 클리어 애니메이션 타이머
+        let transitionStartRadius = 0; // 라인 축소 애니메이션 시작 반지름
+
+        // 레벨 시스템 변수
+        let level = 1;
+        let currentEnergyCount = 0;
+        let energyToClear = 1; // Level 1 목표: 1개로 시작
+        
+        // 적 총알 생성 빈도 설정
+        const BASE_SPAWN_PERIOD = 240; // 레벨 1의 기본 생성 주기 (4초에 1발)
+        const PERIOD_DECREMENT_PER_LEVEL = 30; // 레벨이 오를 때마다 생성 주기 감소량 (빈도 증가)
+        
+        // 궤도 반지름 설정 (새로운 변수)
+        const BASE_RADIUS_FACTOR = 0.45; // 초기 궤도 반지름 계수 
+        const MIN_RADIUS_FACTOR = 0.20; // 최소 궤도 반지름 계수 (20% 한계점)
+        const RADIUS_DECREMENT_RATIO = 0.98; // 2% 감소
+        let currentRadiusFactor = BASE_RADIUS_FACTOR; // 레벨에 따라 감소할 계수
+        let targetRadiusFactor = BASE_RADIUS_FACTOR; // 다음 레벨의 목표 반지름 계수
+
+        // 화면 크기 관련
+        let centerX, centerY, radius;
+
+        // 플레이어 설정
+        const player = {
+            angle: 0,
+            size: 10,
+            speed: 0.03, // **속도 고정: 0.03**
+            direction: 1, // 1: 시계방향, -1: 반시계방향
+            color: '#ffffff', // 화이트
+            trail: [] // 꼬리 효과 (잔상)
+        };
+        const MAX_TRAIL_LENGTH = 50; // 잔상의 최대 길이 (길게 설정)
+        const TRAIL_FADE_RATE = 0.02; // 잔상이 사라지는 속도 (길게 유지하기 위해 느리게)
+
+        // 엔티티 관리
+        let items = []; // 에너지 (노란색)
+        let bullets = []; // 중앙에서 나오는 적 총알 (비행 중)
+        let placedTraps = []; // 라인에 고정된 장애물 (붉은 점)
+        let playerShots = []; // 플레이어가 발사하는 총알
+        let particles = [];
+        
+        // 고정 장애물 설정
+        const TRAP_DURATION = 180; // 3초 (180프레임)
+        const TRAP_SIZE = 10; // 훨씬 더 크게 조정
+        const TRAP_BOUNCE_DURATION = 8; // 튕김 애니메이션 지속 시간 (프레임)
+        const TRAP_MAX_SCALE = 1.8; // 최대 튕김 크기
+        const BLINK_DURATION = 30; // 0.5초 (30프레임)
+        const LEVEL_TRANSITION_DURATION = 90; // 레벨 클리어 시퀀스 지속 시간 (1.5초)
+
+        // 코어 구조에 보호막 정보 추가
+        const core = { 
+            size: 15, 
+            color: '#ff3333', // 붉은색 적 코어
+            hitEffect: 0,
+            shieldSegments: [], // 보호막 칸 배열
+            destroyedSegments: 0, // 파괴된 칸 수
+            isVulnerable: false, // 보호막이 모두 파괴되었으나, 최종 에너지를 기다림 (New State)
+            awaitingFinalHit: false, // 최종 에너지 획득 후, 총알 명중을 기다림 (New State)
+            // 흔들림 효과를 위해 충격 벡터로 변경
+            shakeImpulse: { x: 0, y: 0 }, 
+        }; 
+        const SHIELD_WIDTH = 6; // 두께 약간 증가 (시각적 명확성)
+        const SHIELD_RADIUS_OFFSET = 10; // 간격 약간 증가 (시각적 명확성)
+        const IMPULSE_STRENGTH = 20; // 코어 흔들림 강도
+
+        // 점수 튕김 효과를 주는 헬퍼 함수
+        function bounceScore() {
+            scoreBoard.classList.add('bounce');
+            // 애니메이션 지속 시간(0.3s) 후 클래스 제거
+            setTimeout(() => {
+                scoreBoard.classList.remove('bounce');
+            }, 300); 
+        }
+
+        // 레벨 목표 업데이트 함수
+        function updateLevelGoal() {
+            // Level 1 목표: 1개, Level 2 목표: 2개 ... (0 + N)
+            energyToClear = level; 
+        }
+
+        // 보호막 세그먼트 생성 함수
+        function generateShield(count) {
+            const segments = [];
+            const angleStep = (Math.PI * 2) / count;
+            // 보호막이 1개일 경우를 대비하여 angleStep이 2PI가 되지 않도록 처리 (1개도 호로 그려지게)
+            for (let i = 0; i < count; i++) {
+                segments.push({
+                    baseStartAngle: i * angleStep + 0.05, // 기준 시작 각도
+                    baseEndAngle: (i + 1) * angleStep - 0.05, // 기준 끝 각도
+                    active: true // 활성화 상태
+                });
+            }
+            return segments;
+        }
+
+        // 레벨 클리어 후 다음 레벨 시작
+        function levelUpNext() {
+            gameState = 1; // PLAYING 상태로 전환
+            player.speed = 0.03; // 속도 고정 (재확인)
+            
+            // UI 숨기기
+            levelClearMessageEl.classList.add('hidden');
+            
+            // **currentRadiusFactor를 targetRadiusFactor로 확정**
+            currentRadiusFactor = targetRadiusFactor;
+
+            // 반지름 변경 후 리사이즈 호출 (최종 크기 확정)
+            resize();
+            
+            // 다음 레벨 목표 업데이트
+            level++;
+            updateLevelGoal(); 
+            // 새로운 보호막 생성
+            core.shieldSegments = generateShield(energyToClear);
+            core.destroyedSegments = 0;
+            core.isVulnerable = false; // 보호막 파괴 대기 상태로 초기화
+            core.awaitingFinalHit = false; // 최종 히트 대기 상태로 초기화
+
+            core.shakeImpulse = { x: 0, y: 0 }; // 흔들림 초기화
+
+            levelDisplayEl.innerText = `Level ${level}`;
+            
+            // 다음 아이템 생성
+            spawnItem();
+        }
+
+        // 레벨 클리어 (레벨 업) 처리
+        function levelUp() {
+            gameState = 2; // 레벨 클리어 시퀀스 시작
+            transitionTimer = LEVEL_TRANSITION_DURATION; // 1.5초 (90 frames @ 60fps) 동안 애니메이션 실행
+            
+            // 다음 레벨의 목표 반지름 계수 계산
+            let nextFactor = currentRadiusFactor * RADIUS_DECREMENT_RATIO; // 2% 감소 적용
+            targetRadiusFactor = Math.max(nextFactor, MIN_RADIUS_FACTOR);
+
+            // 현재 반지름을 전환 시작점으로 저장 (애니메이션에 사용)
+            transitionStartRadius = radius; 
+            
+            currentEnergyCount = 0; // 에너지 카운트 리셋
+            
+            // 코어 파괴 효과 (더 크고, 더 밝게)
+            score += 500; // 레벨 클리어 보너스 점수
+            scoreBoard.innerText = score;
+            bounceScore(); // 점수 튕김 효과 적용
+            
+            core.hitEffect = 4.0; // 큰 시각 효과를 위해 수치 증가
+            
+            // 레벨 클리어 메시지 표시
+            levelClearMessageEl.innerText = `LEVEL ${level} CLEAR!`;
+            levelClearMessageEl.classList.remove('hidden');
+
+            // 모든 엔티티 제거 (클린 스타트)
+            bullets = [];
+            playerShots = []; 
+            placedTraps = [];
+        }
+        
+        // 초기화 및 리사이즈
+        function resize() {
+            const container = document.getElementById('game-container');
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            centerX = canvas.width / 2;
+            centerY = canvas.height / 2;
+            // 변경: currentRadiusFactor 사용
+            radius = (Math.min(canvas.width, canvas.height) * currentRadiusFactor);
+            player.size = radius * 0.1; 
+        }
+
+        window.addEventListener('resize', resize);
+        resize();
+        
+        // =========================================================================
+        // ** 입력 처리 로직: 버튼 클릭 및 캔버스 터치(방향 전환) **
+        // =========================================================================
+        
+        // 플레이어 방향 전환 및 게임 로직 실행 함수
+        function processGameFlip() {
+            if (gameState !== 1) return; // PLAYING 상태에서만 조작 가능
+
+            // 방향 전환
+            player.direction *= -1;
+            
+            // 시각적 피드백 (약간의 파티클)
+            createParticles(
+                centerX + Math.cos(player.angle) * radius, 
+                centerY + Math.sin(player.angle) * radius, 
+                5, '#ffffff'
+            );
+            
+            tutorialMsg.style.opacity = '0';
+        }
+
+        // 터치 이벤트 핸들러 (게임 플레이 중 방향 전환)
+        function handleTouchStart(e) {
+            // canvas에 대한 터치: 기본 동작 방지 후 방향 전환 시도
+            e.preventDefault(); 
+            
+            // 게임 플레이 중이 아닐 때 터치 무시
+            if (gameState !== 1) return; 
+
+            processGameFlip();
+        }
+        
+        // **이벤트 리스너 등록:**
+        // 1. **캔버스:** 플레이 중 방향 전환 전용 (passive: false 필수)
+        canvas.addEventListener('touchstart', handleTouchStart, {passive: false}); 
+        
+        // 2. **버튼:** 클릭 이벤트로 시작/재시작을 명확히 분리
+        document.getElementById('start-btn').addEventListener('click', startGame);
+        document.getElementById('restart-btn').addEventListener('click', startGame);
+
+        
+        window.addEventListener('keydown', (e) => {
+            if(e.code === 'Space') {
+                e.preventDefault();
+                if (gameState === 1) {
+                    processGameFlip();
+                } else if (gameState === 0 || gameState === 3) {
+                    startGame();
+                }
+            }
+        });
+        // =========================================================================
+
+
+        // 게임 시작
+        function startGame() {
+            // 게임 루프가 이미 실행 중이라면 취소
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+            }
+            
+            // 모든 상태와 변수를 초기화하여 깨끗한 재시작 보장
+            gameState = 1; // PLAYING 상태로 시작
+            score = 0;
+            frames = 0;
+            
+            player.speed = 0.03; // **속도 고정 (0.03으로 설정)**
+            
+            // **반지름 계수 초기화**
+            currentRadiusFactor = BASE_RADIUS_FACTOR;
+            targetRadiusFactor = BASE_RADIUS_FACTOR; // 목표도 초기와 같음
+
+            // 레벨 시스템 초기화
+            level = 1;
+            currentEnergyCount = 0;
+            updateLevelGoal(); // Level 1 목표 설정 (1개)
+
+            // 보호막 초기화
+            core.shieldSegments = generateShield(energyToClear);
+            core.destroyedSegments = 0;
+            core.isVulnerable = false; // 보호막 파괴 대기 상태로 초기화
+            core.awaitingFinalHit = false; // 최종 히트 대기 상태로 초기화
+
+            core.shakeImpulse = { x: 0, y: 0 }; // 흔들림 초기화
+
+            player.angle = -Math.PI / 2;
+            player.direction = 1;
+            player.trail = [];
+            items = [];
+            bullets = [];
+            placedTraps = [];
+            playerShots = []; // 플레이어 총알 리셋
+            particles = [];
+            core.hitEffect = 0; // 코어 효과 리셋
+            
+            scoreBoard.innerText = score;
+            levelDisplayEl.innerText = `Level ${level}`;
+            
+            startScreen.classList.add('hidden');
+            gameOverScreen.classList.add('hidden');
+            levelClearMessageEl.classList.add('hidden');
+            tutorialMsg.style.opacity = '1';
+            
+            // 리사이즈 호출 (초기 반지름 설정)
+            resize(); 
+
+            // 첫 아이템 생성
+            spawnItem();
+            
+            // 게임 루프 시작
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        // 게임 오버
+        function gameOver() {
+            gameState = 3; // GAME_OVER 상태
+            finalScoreEl.innerText = `Score: ${score}`;
+            gameOverScreen.classList.remove('hidden');
+            
+            // 루프 중단 (속도 증가 문제의 근본적인 해결책)
+            cancelAnimationFrame(animationFrameId);
+            animationFrameId = null; 
+            
+            // 잔상 초기화 (잔상이 사라지는 효과를 그릴 필요 없이 즉시 종료)
+            player.trail = []; 
+            
+            // 폭발 효과 (한 번만 그림)
+            const px = centerX + Math.cos(player.angle) * radius;
+            const py = centerY + Math.sin(player.angle) * radius;
+            createParticles(px, py, 50, player.color);
+            
+            // 마지막 프레임 한번 렌더링
+            drawScene();
+        }
+
+        // 객체 생성 헬퍼
+        function spawnItem() {
+            // 플레이어 현재 위치 반대편 쯤에 랜덤하게 생성
+            let spawnAngle = player.angle + Math.PI + (Math.random() * Math.PI/2 - Math.PI/4);
+            items.push({
+                angle: spawnAngle,
+                active: true,
+                pulse: 0
+            });
+        }
+
+        function spawnBullet() {
+            // 랜덤한 각도에서 발사 (플레이어 근처를 노릴 확률 높임)
+            let targetAngle;
+            if (Math.random() > 0.4) {
+                 // 60% 확률로 플레이어 근처 조준 (예측 사격 느낌)
+                 const randomOffset = (Math.random() - 0.5) * 1.5; // 약간의 오차
+                 targetAngle = player.angle + randomOffset;
+            } else {
+                // 완전 랜덤
+                targetAngle = Math.random() * Math.PI * 2;
+            }
+
+            bullets.push({
+                angle: targetAngle, // 초기 각도
+                distance: 0, // 중앙에서 시작
+                // **적 총알 속도 증가: 0.3 -> 0.5**
+                speed: (0.5 + Math.random() * 0.5), 
+                active: true
+            });
+        }
+        
+        // 플레이어 총알 발사
+        function fireShot() {
+            const px = centerX + Math.cos(player.angle) * radius;
+            const py = centerY + Math.sin(player.angle) * radius;
+            
+            // 중앙을 향하는 벡터 계산
+            const dx = centerX - px;
+            const dy = centerY - py;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const speed = 10; // 플레이어 총알 속도
+
+            playerShots.push({
+                x: px,
+                y: py,
+                vx: (dx / dist) * speed,
+                vy: (dy / dist) * speed,
+                size: 5,
+                color: '#ffff00', // 노란색
+                active: true
+            });
+            // 발사 시 반동 파티클 효과
+            createParticles(px, py, 10, '#ffffff');
+        }
+
+        function createParticles(x, y, count, color) {
+            for(let i=0; i<count; i++) {
+                particles.push({
+                    x: x,
+                    y: y,
+                    vx: (Math.random() - 0.5) * 5,
+                    vy: (Math.random() - 0.5) * 5,
+                    life: 1.0,
+                    color: color
+                });
+            }
+        }
+
+        // 씬을 그리는 함수 (게임 오버 시 최종 화면 표시를 위해 분리)
+        function drawScene() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // 코어의 현재 위치 (흔들림 적용)
+            const coreDrawX = centerX + core.shakeImpulse.x; // 흔들림 벡터 적용
+            const coreDrawY = centerY + core.shakeImpulse.y; // 흔들림 벡터 적용
+
+            // --- Shield Segments Drawing (보호막 그리기) ---
+            const count = core.shieldSegments.length;
+            if (count > 0) {
+                const angleStep = (Math.PI * 2) / count;
+                const activeSegments = core.shieldSegments.filter(s => s.active);
+                const activeCount = activeSegments.length;
+
+                // --- 보호막 회전 로직 (플레이어를 바라보게) ---
+                if (activeCount > 0) {
+                    
+                    // 1. 남아있는 세그먼트의 중심 각도 계산 (가장 왼쪽과 오른쪽 세그먼트의 평균)
+                    // 파괴가 순차적이므로, 남아있는 블록의 시작 인덱스와 끝 인덱스를 사용
+                    const firstActiveIndex = core.destroyedSegments;
+                    
+                    // 남아있는 블록의 전체 각도 합: (남아있는 세그먼트 수) * angleStep
+                    const angleSpan = activeCount * angleStep;
+
+                    // 남아있는 블록의 시작 각도: 첫 번째 활성 세그먼트의 시작 각도
+                    const startAngleOfActiveBlock = core.shieldSegments[firstActiveIndex].baseStartAngle;
+                    
+                    // 남아있는 블록의 중심 각도: 시작 각도 + (각도 범위 / 2)
+                    const blockCenterAngle = startAngleOfActiveBlock + angleSpan / 2;
+                    
+                    // 2. 이 중심 각도를 플레이어의 현재 각도로 이동시키기 위한 오프셋
+                    // 오프셋: 플레이어의 각도 - 블록의 중심 각도
+                    const rotationOffset = player.angle - blockCenterAngle; 
+
+                    // 3. 세그먼트 그리기
+                    core.shieldSegments.forEach((segment) => {
+                        if (segment.active) {
+                            // 각 세그먼트의 기준 각도에 동적 오프셋을 더하여 회전
+                            const startAngle = segment.baseStartAngle + rotationOffset;
+                            const endAngle = segment.baseEndAngle + rotationOffset;
+    
+                            ctx.beginPath();
+                            const shieldRadius = core.size + SHIELD_RADIUS_OFFSET;
+                            ctx.arc(coreDrawX, coreDrawY, shieldRadius, startAngle, endAngle);
+                            ctx.strokeStyle = '#ff3333'; // 붉은색 보호막 색상
+                            ctx.lineWidth = SHIELD_WIDTH;
+                            ctx.lineCap = 'butt';
+                            ctx.shadowBlur = 10;
+                            ctx.shadowColor = '#ff3333';
+                            ctx.stroke();
+                            ctx.shadowBlur = 0;
+                        }
+                    });
+                }
+            }
+            
+            // --- 코어(중앙 타겟) 그리기 ---
+            // 레벨 클리어 시퀀스 중이 아닐 때만 코어를 그림
+            if (gameState !== 2 || transitionTimer > 0) {
+                ctx.beginPath();
+                // 타격 효과에 따라 크기 조절
+                let currentCoreSize = core.size * (1 + core.hitEffect * 0.5);
+                ctx.arc(coreDrawX, coreDrawY, currentCoreSize, 0, Math.PI * 2);
+                
+                // 레벨 클리어 폭발 시 중앙이 비어있는 느낌 강조 (하얀색 폭발 시퀀스)
+                if(gameState === 2 && transitionTimer > 0) {
+                    // 폭발 중에는 하얀색으로 칠함
+                    ctx.fillStyle = `rgba(255, 255, 255, ${Math.min(1, transitionTimer / 90 * 2)})`;
+                    ctx.shadowBlur = 50 * core.hitEffect;
+                    ctx.shadowColor = '#fff';
+                } else {
+                    ctx.fillStyle = core.color;
+                    ctx.shadowBlur = 20 + core.hitEffect * 20;
+                    ctx.shadowColor = core.color;
+                }
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+            
+            // 메인 라인 (Orbit) 그리기
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)'; // 투명도 더 낮춤
+            ctx.lineWidth = 2; // 얇게
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)'; // 투명도 더 낮춤
+            ctx.lineWidth = 1; // 얇게
+            ctx.stroke();
+
+            // 아이템 그리기 (클리어 시퀀스 중이거나 게임 오버 중에는 그리지 않음)
+            if (gameState === 1) {
+                items.forEach(item => {
+                    if(!item.active) return;
+                    const x = centerX + Math.cos(item.angle) * radius;
+                    const y = centerY + Math.sin(item.angle) * radius;
+                    
+                    const pulse = Math.sin(frames * 0.1) * 3;
+
+                    ctx.beginPath();
+                    ctx.arc(x, y, 6 + pulse, 0, Math.PI * 2);
+                    ctx.fillStyle = '#ffff00'; // 노란색
+                    ctx.shadowBlur = 15;
+                    ctx.shadowColor = '#ffff00';
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+                });
+            }
+
+            // 비행 중 총알 그리기 (적) - 클리어 시퀀스 중이거나 게임 오버 중에는 그리지 않음
+            if (gameState === 1) {
+                bullets.forEach(b => {
+                    if(!b.active) return;
+                    const x = centerX + Math.cos(b.angle) * b.distance;
+                    const y = centerY + Math.sin(b.angle) * b.distance;
+
+                    ctx.beginPath();
+                    // 총알 모양
+                    ctx.arc(x, y, 4, 0, Math.PI*2);
+                    ctx.fillStyle = '#ff3333';
+                    ctx.shadowBlur = 10;
+                    ctx.shadowColor = '#ff0000';
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+
+                    // 궤적(선) 느낌 추가
+                    ctx.beginPath();
+                    ctx.moveTo(x, y);
+                    ctx.lineTo(
+                        centerX + Math.cos(b.angle) * (b.distance - 10),
+                        centerY + Math.sin(b.angle) * (b.distance - 10)
+                    );
+                    ctx.strokeStyle = 'rgba(255, 50, 50, 0.5)';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                });
+            }
+
+            // --- 고정 장애물 (트랩) 그리기 ---
+            placedTraps.forEach(trap => {
+                if(!trap.active) return;
+                const x = centerX + Math.cos(trap.angle) * radius;
+                const y = centerY + Math.sin(trap.angle) * radius;
+                
+                // 깜빡임 로직: 수명(life)이 BLINK_DURATION(30프레임) 이하일 때 3번 깜빡이게
+                let alpha = 1.0;
+                if (trap.life <= BLINK_DURATION) {
+                    // 30 프레임 동안 3번 깜빡이려면, 10프레임 주기로 깜빡여야 함 (6프레임 켜짐, 4프레임 꺼짐)
+                    const blinkFrame = trap.life % 10;
+                    if (blinkFrame < 6) { // 6프레임 동안 보임
+                        alpha = 1.0;
+                    } else { // 4프레임 동안 사라짐
+                        alpha = 0.0;
+                    }
+                }
+                
+                // 튕김 효과 적용
+                const currentTrapSize = TRAP_SIZE * trap.scale;
+
+                if (alpha > 0) { // alpha가 0일 때는 그리지 않음
+                    ctx.beginPath();
+                    ctx.arc(x, y, currentTrapSize, 0, Math.PI * 2); // 크기 변경
+                    ctx.fillStyle = `rgba(255, 51, 51, 1.0)`; // 붉은색 (투명도 1.0 고정)
+                    ctx.shadowBlur = 20;
+                    ctx.shadowColor = '#ff3333';
+                    ctx.globalAlpha = alpha; // 깜빡임 효과 적용
+                    ctx.fill();
+                    ctx.globalAlpha = 1.0;
+                    ctx.shadowBlur = 0;
+                }
+            });
+            
+            // --- 플레이어 총알 그리기 ---
+            playerShots.forEach(shot => {
+                if(!shot.active) return;
+                ctx.beginPath();
+                ctx.arc(shot.x, shot.y, shot.size, 0, Math.PI * 2);
+                ctx.fillStyle = shot.color;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = shot.color;
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            });
+            
+            // --- Player Trail (잔상) 그리기 ---
+            player.trail.forEach((t, index) => {
+                ctx.beginPath();
+                // 잔상을 두 배 얇게 만들기 위해 크기 감소 비율을 player.size * 0.125로 변경했습니다.
+                const size = 1 + (player.size * 0.125) * (t.life); 
+                ctx.arc(t.x, t.y, size, 0, Math.PI * 2);
+                ctx.fillStyle = player.color;
+                ctx.globalAlpha = t.life * 0.6; // 투명도 조절
+                ctx.fill();
+                ctx.globalAlpha = 1.0;
+            });
+
+
+            // 플레이어 그리기
+            const px = centerX + Math.cos(player.angle) * radius;
+            const py = centerY + Math.sin(player.angle) * radius;
+            
+            ctx.beginPath();
+            ctx.arc(px, py, player.size, 0, Math.PI * 2);
+            ctx.fillStyle = player.color;
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = player.color;
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            // 파티클 그리기
+            particles.forEach(p => {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 3 * p.life, 0, Math.PI * 2);
+                ctx.fillStyle = p.color;
+                ctx.globalAlpha = p.life;
+                ctx.fill();
+                ctx.globalAlpha = 1;
+            });
+            
+            // 레벨 클리어 시퀀스 중 화면 중앙에 큰 백색 깜박임 효과 추가
+            if (gameState === 2 && transitionTimer > 0) {
+                const alpha = Math.min(1, transitionTimer / LEVEL_TRANSITION_DURATION * 2); // 초반에 강하게, 후반에 약하게
+                ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.4})`;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+        }
+
+
+        // 메인 게임 루프
+        function gameLoop() {
+            // 1. 업데이트
+            if (gameState === 1) { // PLAYING 상태
+                
+                // 플레이어 이동 (player.speed는 0.03로 고정)
+                player.angle += player.speed * player.direction;
+
+                // --- Player Trail 업데이트 ---
+                const px = centerX + Math.cos(player.angle) * radius;
+                const py = centerY + Math.sin(player.angle) * radius;
+                player.trail.push({ x: px, y: py, life: 1.0 }); // 현재 위치를 잔상에 추가
+
+                // 잔상 길이 제한
+                while (player.trail.length > MAX_TRAIL_LENGTH) {
+                    player.trail.shift();
+                }
+
+                // 잔상 수명 업데이트 (페이드 아웃)
+                player.trail.forEach(t => {
+                    t.life = Math.max(0, t.life - TRAIL_FADE_RATE); 
+                });
+                
+                // 수명이 다한 잔상 제거
+                player.trail = player.trail.filter(t => t.life > 0);
+                // --- Player Trail 업데이트 끝 ---
+                
+                // 코어 흔들림 업데이트: 충격이 빠르게 감쇠
+                core.shakeImpulse.x *= 0.8; // 감쇠율
+                core.shakeImpulse.y *= 0.8; 
+                
+                // 아이템 업데이트 및 충돌
+                items.forEach(item => {
+                    if(!item.active) return;
+                    
+                    // 각도 차이 계산 (라디안)
+                    let diff = Math.abs(player.angle - item.angle);
+                    diff = diff % (Math.PI * 2);
+                    if(diff > Math.PI) diff = (Math.PI * 2) - diff;
+
+                    // 충돌 판정 (각도 차이가 매우 작으면 획득)
+                    if(diff < 0.15) {
+                        item.active = false;
+                        score += 10; // 아이템 획득 점수
+                        scoreBoard.innerText = score;
+                        bounceScore(); // 점수 튕김 효과 적용
+                        
+                        // 시각적 효과를 위해 총알 발사
+                        fireShot();
+                        
+                        // --- 핵심 로직 수정: 보호막 파괴 및 최종 타격 준비 ---
+                        if (!core.isVulnerable) {
+                            // 쉴드 파괴가 아직 안된 상태
+                            core.destroyedSegments++;
+                            
+                            // 보호막 시각적 파괴 효과
+                            if (core.destroyedSegments <= energyToClear) {
+                                const segmentIndex = core.destroyedSegments - 1;
+                                if (core.shieldSegments[segmentIndex]) {
+                                    core.shieldSegments[segmentIndex].active = false;
+                                    // 보호막 칸이 파괴될 때의 파티클 효과
+                                    // 주의: 보호막의 각도는 player.angle에 의해 회전하기 때문에, 파티클 위치는 원본 각도(baseAngle)가 아닌 player.angle 기준으로 대략 계산합니다.
+                                    // 여기서는 이미 보호막이 파괴된 상태이므로, 간단히 코어 주변에서 터지게 합니다.
+                                    createParticles(centerX, centerY, 20, '#ff3333'); 
+                                }
+                            }
+                            
+                            // 레벨 클리어 체크 (마지막 보호막 칸이 깨졌는지)
+                            if (core.destroyedSegments >= energyToClear) {
+                                // 보호막이 모두 깨짐. -> 최종 에너지 획득 대기 상태로 전환
+                                core.isVulnerable = true; 
+                                spawnItem(); // 레벨업에 필요한 "마지막 타격용" 에너지 1개 생성
+                            } else {
+                                // 보호막이 남아있다면 아이템 리스폰
+                                spawnItem();
+                            }
+
+                        } else if (core.isVulnerable && !core.awaitingFinalHit) {
+                            // 보호막은 깨졌고 (isVulnerable=true), 마지막 에너지를 획득함.
+                            // -> 총알 명중 대기 상태로 전환 (fireShot은 이미 위에서 호출됨)
+                            core.awaitingFinalHit = true; 
+                            // 더 이상 아이템 생성 안함
+                        }
+                        // --- 핵심 로직 수정 끝 ---
+
+
+                        // 파티클 (아이템 획득)
+                        const ix = centerX + Math.cos(item.angle) * radius;
+                        const iy = centerY + Math.sin(item.angle) * radius;
+                        createParticles(ix, iy, 15, '#ffff00'); // 노란색 아이템 파티클 유지
+                    }
+                });
+
+                // 총알 생성 로직 (레벨 기반 빈도 증가)
+                let targetSpawnPeriod = Math.max(
+                    30, 
+                    BASE_SPAWN_PERIOD - (level - 1) * PERIOD_DECREMENT_PER_LEVEL
+                );
+                
+                if (frames % targetSpawnPeriod === 0) {
+                    spawnBullet();
+                }
+
+                // 총알 업데이트 및 라인 충돌 -> 고정 장애물 생성 로직
+                bullets.forEach(b => {
+                    if(!b.active) return;
+                    
+                    // 밖으로 이동
+                    b.distance += b.speed;
+
+                    // 라인에 도달하면
+                    if (b.distance >= radius) {
+                        // 총알을 붉은 점 장애물로 변환하여 배치 + 튕김 효과 추가
+                        placedTraps.push({
+                            angle: b.angle,
+                            life: TRAP_DURATION, // 3초 동안 유지
+                            active: true,
+                            scale: TRAP_MAX_SCALE, // 튕김 시작
+                            scaleTimer: TRAP_BOUNCE_DURATION // 튕김 지속 시간
+                        });
+                        b.active = false; // 비행 중 총알 제거
+                    }
+
+                    // 화면 밖으로 나가면 제거 (안전 장치)
+                    if(b.distance > Math.max(canvas.width, canvas.height)) {
+                        b.active = false;
+                    }
+                });
+                bullets = bullets.filter(b => b.active); // 비활성 비행 총알 제거
+
+                // --- 고정 장애물 (트랩) 업데이트 및 충돌 검사 ---
+                placedTraps.forEach(trap => {
+                    if(!trap.active) return;
+                    
+                    // 튕김 효과 업데이트
+                    if (trap.scale > 1.0) {
+                        // scaleTimer가 줄어들면서 scale이 1.0으로 부드럽게 감소
+                        const t = 1 - (trap.scaleTimer / TRAP_BOUNCE_DURATION); // 0.0 -> 1.0
+                        trap.scale = TRAP_MAX_SCALE - (TRAP_MAX_SCALE - 1) * t; 
+                        trap.scaleTimer--;
+                        if (trap.scaleTimer <= 0) trap.scale = 1.0;
+                    }
+
+                    trap.life--;
+                    
+                    if (trap.life <= 0) {
+                        trap.active = false; // 수명 다하면 즉시 제거
+                        return;
+                    }
+
+                    // 충돌 검사: 플레이어와 붉은 점 장애물의 각도 비교
+                    let diff = Math.abs(player.angle - trap.angle);
+                    diff = diff % (Math.PI * 2);
+                    if(diff > Math.PI) diff = (Math.PI * 2) - diff;
+
+                    // 궤도상 위치도 맞고, 각도도 맞으면 충돌
+                    // 충돌 허용 범위는 플레이어 크기와 트랩 크기에 따라 조정 (0.15는 적절한 값으로 유지)
+                    if (diff < 0.15) { 
+                        gameOver();
+                    }
+                });
+                placedTraps = placedTraps.filter(t => t.active); // 비활성 트랩 제거
+
+
+                // --- 플레이어 총알 업데이트 및 코어 타격 시각 효과 ---
+                const shieldInnerRadius = core.size;
+
+                playerShots.forEach(shot => {
+                    if(!shot.active) return;
+                    
+                    // 플레이어 총알 이동
+                    shot.x += shot.vx;
+                    shot.y += shot.vy;
+                    
+                    const distToCore = Math.sqrt(
+                        (shot.x - centerX) ** 2 + (shot.y - centerY) ** 2
+                    );
+                    
+                    // 코어 자체에 도달하면 소멸 (시각적 효과)
+                    if (distToCore < core.size) {
+                        // 중앙 타격 효과
+                        shot.active = false; 
+                        core.hitEffect = 1.0; 
+                        
+                        // **방향성 흔들림 적용**:
+                        const angle = player.angle; 
+                        // 플레이어와 코어의 각도를 이용한 반대 방향 벡터 (코어에서 플레이어 반대 방향)
+                        core.shakeImpulse.x = -Math.cos(angle) * IMPULSE_STRENGTH;
+                        core.shakeImpulse.y = -Math.sin(angle) * IMPULSE_STRENGTH;
+                        
+                        // 1. 레벨 클리어 트리거: 최종 총알이 코어에 명중했을 때
+                        if (core.awaitingFinalHit) {
+                            levelUp(); 
+                            core.awaitingFinalHit = false; // 플래그 리셋
+                            core.isVulnerable = false; // 플래그 리셋 (레벨업 시퀀스 중이라 불필요하지만 안전장치)
+                        }
+                        
+                        // 점수 로직은 아이템 획득 시로 이동했음
+                        createParticles(centerX, centerY, 15, shot.color); 
+                    }
+                    
+                    // 화면 밖으로 나가면 제거 (안전 장치)
+                    if (shot.x < 0 || shot.x > canvas.width || shot.y < 0 || shot.y > canvas.height) {
+                        shot.active = false;
+                    }
+                });
+                playerShots = playerShots.filter(shot => shot.active); // 비활성 샷 제거
+                
+                // 코어 타격 효과 감소 (PLAYING 상태에서만)
+                core.hitEffect = Math.max(0, core.hitEffect - 0.05);
+
+            } else if (gameState === 2) { // LEVEL_CLEAR_SEQUENCE 상태
+                // 레벨 클리어 시퀀스 진행
+                transitionTimer--;
+                
+                // 코어 타격 효과를 지속적으로 감소시킴 (파괴 애니메이션)
+                core.hitEffect = Math.max(0, core.hitEffect - 0.04); 
+                
+                // 코어 흔들림은 레벨 클리어 시퀀스에서는 멈춤
+                core.shakeImpulse.x = 0;
+                core.shakeImpulse.y = 0;
+
+                // 폭발 파티클 지속 생성 (시퀀스 초반)
+                if (transitionTimer > 40) { 
+                    createParticles(centerX, centerY, 15, '#fff'); 
+                }
+                
+                // 라인 크기 전환 애니메이션 (선형 보간)
+                const t = 1 - (transitionTimer / LEVEL_TRANSITION_DURATION); // 0.0 -> 1.0 (시작 -> 끝)
+                const startRatio = transitionStartRadius / Math.min(canvas.width, canvas.height);
+                
+                // targetRadiusFactor는 다음 레벨의 크기 비율
+                currentRadiusFactor = startRatio + (targetRadiusFactor - startRatio) * t;
+                
+                // radius를 애니메이션 값으로 업데이트
+                radius = Math.min(canvas.width, canvas.height) * currentRadiusFactor;
+
+                if (transitionTimer <= 0) {
+                    levelUpNext(); // 다음 레벨 시작
+                }
+            } 
+            
+            // --- 파티클 업데이트 (수정된 안전한 필터 로직) ---
+            particles = particles.filter(p => {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life -= 0.03;
+                return p.life > 0;
+            });
+
+            frames++;
+
+            // 2. 그리기
+            drawScene();
+
+            // 게임 플레이 상태일 때만 다음 프레임 요청
+            if (gameState !== 3) {
+                 animationFrameId = requestAnimationFrame(gameLoop);
+            }
+        }
+
+        // 버튼 이벤트 리스너
+        document.getElementById('start-btn').addEventListener('click', startGame);
+        document.getElementById('restart-btn').addEventListener('click', startGame);
+        
+        // 초기 시작
+        // requestAnimationFrame(gameLoop); //startGame에서 호출되도록 변경
+
+    </script>
+</body>
+</html>
