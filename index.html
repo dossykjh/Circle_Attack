@@ -134,6 +134,7 @@
         .hidden {
             opacity: 0;
             pointer-events: none !important;
+            z-index: -1 !important; /* [수정] 투명해지면 맨 뒤로 보내서 터치 완벽 차단 */
         }
 
         h1 {
@@ -723,7 +724,7 @@
 
                     ctx.beginPath();
                     ctx.arc(x, y, 6 + pulse, 0, Math.PI * 2);
-                    ctx.fillStyle = '#ffff00'; // 노란색
+                    ctx.fillStyle = '#ffff00'; // 노란색 (투명도 복구)
                     ctx.shadowBlur = 15;
                     ctx.shadowColor = '#ffff00';
                     ctx.fill();
@@ -805,18 +806,30 @@
                 ctx.fill();
                 ctx.shadowBlur = 0;
             });
-            
-            // --- Player Trail (잔상) 그리기 ---
-            player.trail.forEach((t, index) => {
+
+            // 플레이어 꼬리 그리기 (잔상 강조)
+            if (player.trail.length > 0) {
                 ctx.beginPath();
-                // 잔상을 두 배 얇게 만들기 위해 크기 감소 비율을 player.size * 0.125로 변경했습니다.
-                const size = 1 + (player.size * 0.125) * (t.life); 
-                ctx.arc(t.x, t.y, size, 0, Math.PI * 2);
-                ctx.fillStyle = player.color;
-                ctx.globalAlpha = t.life * 0.6; // 투명도 조절
-                ctx.fill();
-                ctx.globalAlpha = 1.0;
-            });
+                // 꼬리가 길수록 더 투명해지도록 alpha 값 계산
+                const MAX_TRAIL_LENGTH = 30; // 30으로 설정하여 더 긴 꼬리
+                for (let i = 0; i < player.trail.length; i++) {
+                    const tAngle = player.trail[i];
+                    const tx = centerX + Math.cos(tAngle) * radius;
+                    const ty = centerY + Math.sin(tAngle) * radius;
+                    
+                    // 잔상 효과를 위해 투명도 조절 (최대 0.6으로 높임)
+                    const alpha = (i / MAX_TRAIL_LENGTH) * 0.6; 
+                    
+                    if(i === 0) ctx.moveTo(tx, ty);
+                    else ctx.lineTo(tx, ty);
+
+                    // 꼬리를 그리는 동안 스타일을 계속 업데이트 (잔상이 옅어지도록)
+                    ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+                    ctx.lineWidth = player.size * (i / MAX_TRAIL_LENGTH) * 0.8; // 끝부분이 얇아지도록 (조금 더 얇게)
+                    ctx.stroke();
+                }
+            }
+            // 잔상 꼬리가 아닌 일반적인 꼬리 선을 한 번 더 그어서 플레이어 바로 뒤를 강조할 수 있지만, 여기서는 루프 안에서 처리했습니다.
 
 
             // 플레이어 그리기
@@ -843,7 +856,7 @@
             
             // 레벨 클리어 시퀀스 중 화면 중앙에 큰 백색 깜박임 효과 추가
             if (gameState === 2 && transitionTimer > 0) {
-                const alpha = Math.min(1, transitionTimer / 90 * 2); // 초반에 강하게, 후반에 약하게
+                const alpha = Math.min(1, transitionTimer / LEVEL_TRANSITION_DURATION * 2); // 초반에 강하게, 후반에 약하게
                 ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.4})`;
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
             }
@@ -920,9 +933,7 @@
                                     core.shieldSegments[segmentIndex].active = false;
                                     
                                     // 파티클 효과: 현재 회전된 보호막 위치에서 생성
-                                    const angleStep = (Math.PI * 2) / core.shieldSegments.length;
-                                    const activeCount = core.shieldSegments.length - (core.destroyedSegments - 1); // 파괴 직전 갯수? 아니 파괴된 것 포함 전체 길이
-                                    // 복잡한 계산 대신 코어 주변에서 터지게 함 (회전 로직 때문에 정확한 위치 계산이 복잡)
+                                    // 회전된 좌표를 대략적으로 계산하여 파티클 생성
                                     createParticles(centerX, centerY, 20, '#ff3333'); 
                                 }
                             }
@@ -1025,6 +1036,7 @@
                         core.hitEffect = 1.0; 
                         
                         const angle = player.angle; 
+                        // 요청하신 반대 방향으로 흔들림 (코어에서 플레이어 반대 방향)
                         core.shakeImpulse.x = -Math.cos(angle) * IMPULSE_STRENGTH;
                         core.shakeImpulse.y = -Math.sin(angle) * IMPULSE_STRENGTH;
                         
