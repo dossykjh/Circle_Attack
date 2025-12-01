@@ -19,6 +19,8 @@
             overflow: hidden;
             font-family: 'Roboto', 'Black Han+Sans', sans-serif;
             touch-action: none; /* 모바일 터치 딜레이 방지 */
+            user-select: none; /* 텍스트 선택 방지 */
+            -webkit-user-select: none;
         }
 
         #game-container {
@@ -39,6 +41,7 @@
             width: 100%;
             height: 100%;
             touch-action: none; /* 캔버스 자체에도 touch-action 적용 */
+            cursor: pointer; /* PC에서 클릭 가능함을 표시 */
         }
 
         #ui-layer {
@@ -134,7 +137,7 @@
         .hidden {
             opacity: 0;
             pointer-events: none !important;
-            z-index: -1 !important; /* [수정] 투명해지면 맨 뒤로 보내서 터치 완벽 차단 */
+            display: none !important; /* [수정] 화면에서 완전히 제거하여 터치/클릭 원천 차단 */
         }
 
         h1 {
@@ -218,7 +221,7 @@
         
         <div id="level-clear-message" class="hidden"></div>
         
-        <div class="tutorial" id="tutorial-msg">화면을 탭하여 방향을 바꾸고 총알을 피하세요!</div>
+        <div class="tutorial" id="tutorial-msg">화면을 탭하거나 클릭하여 방향을 바꾸세요!</div>
     </div>
 
     <script>
@@ -436,24 +439,33 @@
             tutorialMsg.style.opacity = '0';
         }
 
-        // 터치 이벤트 핸들러 (게임 플레이 중 방향 전환)
-        function handleTouchStart(e) {
-            // canvas에 대한 터치: 기본 동작 방지 후 방향 전환 시도
-            e.preventDefault(); 
+        // 입력 이벤트 핸들러 (PC 클릭 / 모바일 터치 공용)
+        function handleInputEvent(e) {
+            // 모바일 터치 이벤트일 경우 기본 동작(스크롤, 줌 등) 방지
+            if (e.type === 'touchstart') {
+                e.preventDefault(); 
+            }
             
-            // 게임 플레이 중이 아닐 때 터치 무시
+            // 게임 플레이 중이 아닐 때 캔버스 클릭은 무시 (버튼 클릭은 별도 리스너에서 처리됨)
             if (gameState !== 1) return; 
 
             processGameFlip();
         }
-        
+
         // **이벤트 리스너 등록:**
-        // 1. **캔버스:** 플레이 중 방향 전환 전용 (passive: false 필수)
-        canvas.addEventListener('touchstart', handleTouchStart, {passive: false}); 
+        // 1. **PC 마우스 클릭:** 캔버스에 mousedown 이벤트 추가
+        canvas.addEventListener('mousedown', handleInputEvent);
+
+        // 2. **모바일 터치:** 캔버스에 touchstart 이벤트 추가 (passive: false 필수)
+        canvas.addEventListener('touchstart', handleInputEvent, {passive: false}); 
         
-        // 2. **버튼:** 클릭 이벤트로 시작/재시작을 명확히 분리
+        // 3. **버튼:** 클릭 이벤트로 시작/재시작을 명확히 분리
+        // (버튼은 display:none이 아닐 때만 눌림)
         document.getElementById('start-btn').addEventListener('click', startGame);
         document.getElementById('restart-btn').addEventListener('click', startGame);
+        // 모바일에서 버튼 터치 반응성 향상을 위해 touchstart도 추가 (버튼 전용)
+        document.getElementById('start-btn').addEventListener('touchstart', function(e) { e.stopPropagation(); }); 
+        document.getElementById('restart-btn').addEventListener('touchstart', function(e) { e.stopPropagation(); });
 
         
         window.addEventListener('keydown', (e) => {
@@ -724,7 +736,7 @@
 
                     ctx.beginPath();
                     ctx.arc(x, y, 6 + pulse, 0, Math.PI * 2);
-                    ctx.fillStyle = '#ffff00'; // 노란색 (투명도 복구)
+                    ctx.fillStyle = '#ffff00'; // 노란색
                     ctx.shadowBlur = 15;
                     ctx.shadowColor = '#ffff00';
                     ctx.fill();
@@ -806,30 +818,18 @@
                 ctx.fill();
                 ctx.shadowBlur = 0;
             });
-
-            // 플레이어 꼬리 그리기 (잔상 강조)
-            if (player.trail.length > 0) {
+            
+            // --- Player Trail (잔상) 그리기 ---
+            player.trail.forEach((t, index) => {
                 ctx.beginPath();
-                // 꼬리가 길수록 더 투명해지도록 alpha 값 계산
-                const MAX_TRAIL_LENGTH = 30; // 30으로 설정하여 더 긴 꼬리
-                for (let i = 0; i < player.trail.length; i++) {
-                    const tAngle = player.trail[i];
-                    const tx = centerX + Math.cos(tAngle) * radius;
-                    const ty = centerY + Math.sin(tAngle) * radius;
-                    
-                    // 잔상 효과를 위해 투명도 조절 (최대 0.6으로 높임)
-                    const alpha = (i / MAX_TRAIL_LENGTH) * 0.6; 
-                    
-                    if(i === 0) ctx.moveTo(tx, ty);
-                    else ctx.lineTo(tx, ty);
-
-                    // 꼬리를 그리는 동안 스타일을 계속 업데이트 (잔상이 옅어지도록)
-                    ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
-                    ctx.lineWidth = player.size * (i / MAX_TRAIL_LENGTH) * 0.8; // 끝부분이 얇아지도록 (조금 더 얇게)
-                    ctx.stroke();
-                }
-            }
-            // 잔상 꼬리가 아닌 일반적인 꼬리 선을 한 번 더 그어서 플레이어 바로 뒤를 강조할 수 있지만, 여기서는 루프 안에서 처리했습니다.
+                // 잔상을 두 배 얇게 만들기 위해 크기 감소 비율을 player.size * 0.125로 변경했습니다.
+                const size = 1 + (player.size * 0.125) * (t.life); 
+                ctx.arc(t.x, t.y, size, 0, Math.PI * 2);
+                ctx.fillStyle = player.color;
+                ctx.globalAlpha = t.life * 0.6; // 투명도 조절
+                ctx.fill();
+                ctx.globalAlpha = 1.0;
+            });
 
 
             // 플레이어 그리기
