@@ -137,7 +137,7 @@
         .hidden {
             opacity: 0;
             pointer-events: none !important;
-            display: none !important; /* [수정] 화면에서 완전히 제거하여 터치/클릭 원천 차단 */
+            display: none !important; /* 화면에서 완전히 제거 */
         }
 
         h1 {
@@ -251,7 +251,7 @@
 
         // 레벨 시스템 변수
         let level = 1;
-        let currentEnergyCount = 0;
+        // let currentEnergyCount = 0; // (삭제됨: logicalCollected로 대체)
         let energyToClear = 1; // Level 1 목표: 1개로 시작
         
         // 적 총알 생성 빈도 설정
@@ -301,9 +301,9 @@
             color: '#ff3333', // 붉은색 적 코어
             hitEffect: 0,
             shieldSegments: [], // 보호막 칸 배열
-            destroyedSegments: 0, // 파괴된 칸 수
-            isVulnerable: false, // New flag: 마지막 보호막이 깨졌는지 (총알 충돌 대기 상태)
-            awaitingFinalHit: false, // 최종 에너지 획득 후, 총알 명중을 기다림 (New State)
+            destroyedSegments: 0, // [시각적] 파괴된 칸 수 (타격 시 증가)
+            logicalCollected: 0,  // [논리적] 획득한 에너지 아이템 수
+            isVulnerable: false, // 보호막이 모두 파괴되었으나, 최종 에너지를 기다림
             // 흔들림 효과를 위해 충격 벡터로 변경
             shakeImpulse: { x: 0, y: 0 }, 
         }; 
@@ -361,9 +361,8 @@
             // 새로운 보호막 생성
             core.shieldSegments = generateShield(energyToClear);
             core.destroyedSegments = 0;
+            core.logicalCollected = 0; // 아이템 획득 카운트 초기화
             core.isVulnerable = false; // 보호막 파괴 대기 상태로 초기화
-            core.awaitingFinalHit = false; // 최종 히트 대기 상태로 초기화
-
             core.shakeImpulse = { x: 0, y: 0 }; // 흔들림 초기화
 
             levelDisplayEl.innerText = `Level ${level}`;
@@ -383,8 +382,6 @@
 
             // 현재 반지름을 전환 시작점으로 저장 (애니메이션에 사용)
             transitionStartRadius = radius; 
-            
-            currentEnergyCount = 0; // 에너지 카운트 리셋
             
             // 코어 파괴 효과 (더 크고, 더 밝게)
             score += 500; // 레벨 클리어 보너스 점수
@@ -419,7 +416,7 @@
         resize();
         
         // =========================================================================
-        // ** 입력 처리 로직: 버튼 클릭 및 캔버스 터치(방향 전환) **
+        // ** 입력 처리 로직 **
         // =========================================================================
         
         // 플레이어 방향 전환 및 게임 로직 실행 함수
@@ -460,10 +457,9 @@
         canvas.addEventListener('touchstart', handleInputEvent, {passive: false}); 
         
         // 3. **버튼:** 클릭 이벤트로 시작/재시작을 명확히 분리
-        // (버튼은 display:none이 아닐 때만 눌림)
         document.getElementById('start-btn').addEventListener('click', startGame);
         document.getElementById('restart-btn').addEventListener('click', startGame);
-        // 모바일에서 버튼 터치 반응성 향상을 위해 touchstart도 추가 (버튼 전용)
+        // 모바일에서 버튼 터치 반응성 향상을 위해 touchstart도 추가
         document.getElementById('start-btn').addEventListener('touchstart', function(e) { e.stopPropagation(); }); 
         document.getElementById('restart-btn').addEventListener('touchstart', function(e) { e.stopPropagation(); });
 
@@ -502,15 +498,13 @@
 
             // 레벨 시스템 초기화
             level = 1;
-            currentEnergyCount = 0;
+            core.logicalCollected = 0; // 에너지 획득 카운트 초기화
             updateLevelGoal(); // Level 1 목표 설정 (1개)
 
             // 보호막 초기화
             core.shieldSegments = generateShield(energyToClear);
             core.destroyedSegments = 0;
             core.isVulnerable = false; // 보호막 파괴 대기 상태로 초기화
-            core.awaitingFinalHit = false; // 최종 히트 대기 상태로 초기화
-
             core.shakeImpulse = { x: 0, y: 0 }; // 흔들림 초기화
 
             player.angle = -Math.PI / 2;
@@ -596,7 +590,7 @@
         }
         
         // 플레이어 총알 발사
-        function fireShot() {
+        function fireShot(isFinal) {
             const px = centerX + Math.cos(player.angle) * radius;
             const py = centerY + Math.sin(player.angle) * radius;
             
@@ -613,7 +607,8 @@
                 vy: (dy / dist) * speed,
                 size: 5,
                 color: '#ffff00', // 노란색
-                active: true
+                active: true,
+                isFinal: isFinal // 마지막 결정타 여부 확인
             });
             // 발사 시 반동 파티클 효과
             createParticles(px, py, 10, '#ffffff');
@@ -644,8 +639,9 @@
             const count = core.shieldSegments.length;
             if (count > 0) {
                 const angleStep = (Math.PI * 2) / count;
-                const activeSegments = core.shieldSegments.filter(s => s.active);
-                const activeCount = activeSegments.length;
+                
+                // [수정] 논리적 파괴 갯수가 아닌 시각적 파괴 갯수를 기준으로 그림
+                const activeCount = count - core.destroyedSegments;
 
                 // --- 보호막 회전 로직 (플레이어를 바라보게) ---
                 if (activeCount > 0) {
@@ -664,12 +660,18 @@
                     const blockCenterAngle = startAngleOfActiveBlock + angleSpan / 2;
                     
                     // 2. 이 중심 각도를 플레이어의 현재 각도로 이동시키기 위한 오프셋
-                    // 오프셋: 플레이어의 각도 - 블록의 중심 각도
+                    // 목표: 플레이어 반대편(180도)을 보게 하거나, 플레이어 쪽을 막게 하거나.
+                    // 요청: "중심이 나를 바라보게" -> 플레이어 쪽을 막아야 함.
+                    // 따라서 블록의 중심이 player.angle + PI (반대편)에 있어야 플레이어 쪽이 뚫림? 
+                    // 아니면 플레이어 쪽을 '가려야' 함? "에너지를 막아야되니까" -> 플레이어와 코어 사이에 있어야 함.
+                    // 즉, 블록의 중심 각도 == 플레이어의 각도.
+                    
                     const rotationOffset = player.angle - blockCenterAngle; 
 
                     // 3. 세그먼트 그리기
-                    core.shieldSegments.forEach((segment) => {
-                        if (segment.active) {
+                    core.shieldSegments.forEach((segment, idx) => {
+                        // 이미 파괴된 세그먼트는 그리지 않음
+                        if (idx >= core.destroyedSegments) {
                             // 각 세그먼트의 기준 각도에 동적 오프셋을 더하여 회전
                             const startAngle = segment.baseStartAngle + rotationOffset;
                             const endAngle = segment.baseEndAngle + rotationOffset;
@@ -920,35 +922,24 @@
                         scoreBoard.innerText = score;
                         bounceScore(); 
                         
-                        fireShot();
+                        // [수정] 논리적 에너지 획득 카운트 증가
+                        core.logicalCollected++;
                         
-                        // --- 핵심 로직: 보호막 파괴 및 최종 타격 준비 ---
-                        if (!core.isVulnerable) {
-                            core.destroyedSegments++;
-                            
-                            // 보호막 시각적 파괴 효과
-                            if (core.destroyedSegments <= energyToClear) {
-                                const segmentIndex = core.destroyedSegments - 1;
-                                if (core.shieldSegments[segmentIndex]) {
-                                    core.shieldSegments[segmentIndex].active = false;
-                                    
-                                    // 파티클 효과: 현재 회전된 보호막 위치에서 생성
-                                    // 회전된 좌표를 대략적으로 계산하여 파티클 생성
-                                    createParticles(centerX, centerY, 20, '#ff3333'); 
-                                }
-                            }
-                            
-                            if (core.destroyedSegments >= energyToClear) {
-                                core.isVulnerable = true; 
-                                spawnItem(); 
-                            } else {
-                                spawnItem();
-                            }
-
-                        } else if (core.isVulnerable && !core.awaitingFinalHit) {
-                            core.awaitingFinalHit = true; 
+                        // 현재 레벨에서 획득해야 할 쉴드 파괴용 에너지 수(energyToClear)
+                        // 쉴드 파괴용 에너지인가?
+                        if (core.logicalCollected <= energyToClear) {
+                             // 쉴드 파괴탄 발사 (isFinal = false)
+                             fireShot(false);
+                             
+                             // 다음 아이템 생성 (마지막 쉴드탄이면 최종탄 생성, 아니면 일반탄 생성)
+                             // 여기서는 그냥 바로 다음 아이템 스폰
+                             spawnItem();
+                        } else {
+                             // 이것은 쉴드가 다 깨진 후의 '결정타' 에너지임
+                             // 결정타 발사 (isFinal = true)
+                             fireShot(true);
+                             // 더 이상 아이템 스폰 안 함
                         }
-                        // --- 핵심 로직 수정 끝 ---
 
                         const ix = centerX + Math.cos(item.angle) * radius;
                         const iy = centerY + Math.sin(item.angle) * radius;
@@ -1019,7 +1010,8 @@
 
 
                 // 플레이어 총알 업데이트
-                const shieldInnerRadius = core.size;
+                const shieldInnerRadius = core.size + SHIELD_RADIUS_OFFSET - 2; // 약간 안쪽
+                const shieldOuterRadius = core.size + SHIELD_RADIUS_OFFSET + SHIELD_WIDTH + 2; // 약간 바깥쪽
 
                 playerShots.forEach(shot => {
                     if(!shot.active) return;
@@ -1027,28 +1019,45 @@
                     shot.x += shot.vx;
                     shot.y += shot.vy;
                     
-                    const distToCore = Math.sqrt(
+                    const distToCenter = Math.sqrt(
                         (shot.x - centerX) ** 2 + (shot.y - centerY) ** 2
                     );
                     
-                    if (distToCore < core.size) {
-                        shot.active = false; 
-                        core.hitEffect = 1.0; 
-                        
-                        const angle = player.angle; 
-                        // 요청하신 반대 방향으로 흔들림 (코어에서 플레이어 반대 방향)
-                        core.shakeImpulse.x = -Math.cos(angle) * IMPULSE_STRENGTH;
-                        core.shakeImpulse.y = -Math.sin(angle) * IMPULSE_STRENGTH;
-                        
-                        if (core.awaitingFinalHit) {
+                    // [수정] 1. 쉴드 타격 체크 (결정타가 아닐 때만)
+                    if (!shot.isFinal) {
+                         // 쉴드 영역에 도달했나?
+                         if (distToCenter <= shieldOuterRadius && distToCenter >= shieldInnerRadius) {
+                             // 타격했으므로 쉴드 파괴 로직 실행
+                             // (여기서는 정확한 각도 체크 없이, '플레이어 정면'에 있는 쉴드를 깬다고 가정.
+                             //  왜냐하면 쉴드가 플레이어를 따라 돌기 때문에 플레이어가 쏘면 무조건 막는 위치임)
+                             shot.active = false; 
+                             core.destroyedSegments++; // 시각적 파괴 카운트 증가
+                             createParticles(shot.x, shot.y, 20, '#ff3333'); // 붉은 파티클
+
+                             // 모든 쉴드가 다 깨졌는지 확인
+                             if (core.destroyedSegments >= energyToClear) {
+                                 core.isVulnerable = true; // 코어 노출 (붉게 빛나는 등 효과 필요하면 여기서)
+                             }
+                         }
+                    } 
+                    // [수정] 2. 코어 타격 체크 (결정타일 때만, 혹은 쉴드가 없을 때)
+                    else if (shot.isFinal) {
+                        if (distToCenter < core.size) {
+                            shot.active = false; 
+                            core.hitEffect = 1.0; 
+                            
+                            const angle = player.angle; 
+                            core.shakeImpulse.x = -Math.cos(angle) * IMPULSE_STRENGTH;
+                            core.shakeImpulse.y = -Math.sin(angle) * IMPULSE_STRENGTH;
+                            
+                            // 결정타 명중 -> 레벨 클리어
                             levelUp(); 
-                            core.awaitingFinalHit = false; 
-                            core.isVulnerable = false; 
+                            
+                            createParticles(centerX, centerY, 30, shot.color); 
                         }
-                        
-                        createParticles(centerX, centerY, 15, shot.color); 
                     }
                     
+                    // 안전 장치: 화면 밖으로 나가면 제거
                     if (shot.x < 0 || shot.x > canvas.width || shot.y < 0 || shot.y > canvas.height) {
                         shot.active = false;
                     }
